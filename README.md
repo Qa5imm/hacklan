@@ -12,7 +12,7 @@ A go utility to perform LAN attacks, currently it supports only arp spoofing but
 
 ```bash
 #install the package 
-go install github.com/qa5imm/hacklan
+go install github.com/qa5imm/hacklan@latest
 
 # Run the interactive tool
 hacklan
